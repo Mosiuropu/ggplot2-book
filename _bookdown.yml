@@ -6,6 +6,7 @@ rmd_files:
 
 - "preface-3e.Rmd"
 - "preface-2e.Rmd"
+- "preface-fork.Rmd"
 
 - "introduction.Rmd"
 - "getting-started.Rmd"
@@ -31,5 +32,7 @@ rmd_files:
 - "internals.Rmd"
 - "extensions.Rmd"
 - "ext-spring1.Rmd"
+
+- "agricultural-breeding-viz.Rmd"
 
 - "references.Rmd"

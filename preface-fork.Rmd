@@ -1,0 +1,33 @@
+# Fork Contributions {-}
+
+This is a **community fork** of Hadley Wickham's *ggplot2: Elegant Graphics for Data Analysis*.
+
+## About this fork {-}
+
+**Forked by:** Mosiur Rahman
+**GitHub:** [Mosiuropu/ggplot2-book](https://github.com/Mosiuropu/ggplot2-book)
+**Forked from:** [hadley/ggplot2-book](https://github.com/hadley/ggplot2-book)
+**Date:** 2026
+
+## What was added {-}
+
+**New chapter — Chapter \@ref(agricultural-breeding-viz): Agricultural & Plant Breeding Data Visualization**
+
+This chapter fills a gap in the original book: practical ggplot2 patterns for **plant breeders and agricultural scientists**. Topics include:
+
+- Visualising genotype BLUPs/BLUEs for selection decisions
+- Genotype × Environment (GxE) interaction plots for multi-environment trials
+- Multi-trait phenotypic correlation heatmaps
+- Genomic PCA biplots for population structure analysis
+- Field trial layout visualisation for spatial trend detection
+- A reusable `theme_q1_journal()` for manuscript-ready figures
+
+All examples use **self-contained simulated data** — no external files required.
+
+## Why this chapter? {-}
+
+Agricultural and plant science researchers are heavy R users, yet most ggplot2 teaching material focuses on general datasets (`mpg`, `diamonds`, `iris`). Breeders work with **mixed-model outputs**, **multi-environment designs**, and **genomic data** that require specific visualisation strategies. This chapter bridges that gap.
+
+---
+
+*The original book content is copyright Hadley Wickham. Fork additions are contributed under the same Creative Commons licence.*

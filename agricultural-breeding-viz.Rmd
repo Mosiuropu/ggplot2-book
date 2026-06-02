@@ -1,0 +1,316 @@
+```{r, include = FALSE}
+source("common.R")
+columns(1, 2 / 3)
+```
+
+# Agricultural & Plant Breeding Data Visualization {#agricultural-breeding-viz}
+
+> *Chapter contributed by Mosiur Rahman — Plant Breeder, Agricultural Researcher.*
+> *Fork of hadley/ggplot2-book · Added 2026*
+
+---
+
+## Introduction {#agri-intro}
+
+Plant breeders and agricultural scientists routinely deal with data structures that differ from typical textbook examples:
+
+- **Multi-environment trials (MET)** — genotypes tested across locations and years
+- **BLUPs/BLUEs** — mixed-model predicted values for genotype ranking
+- **Genomic data** — SNP marker matrices, kinship, PCA scores
+- **Field layouts** — spatial alpha-lattice or augmented designs
+
+This chapter shows practical ggplot2 patterns for each. All examples use **simulated data** so you can run them without external files.
+
+---
+
+## Simulated Breeding Dataset {#agri-data}
+
+```{r agri-setup, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+set.seed(42)
+
+# 20 genotypes × 4 environments × 3 traits
+n_gen  <- 20
+n_env  <- 4
+traits <- c("GY", "TKW", "PH")  # Grain Yield, Thousand Kernel Weight, Plant Height
+
+genotypes <- paste0("G", str_pad(1:n_gen, 2, pad = "0"))
+envs      <- c("Env_A", "Env_B", "Env_C", "Env_D")
+
+breeding_df <- expand.grid(
+  Genotype    = genotypes,
+  Environment = envs,
+  stringsAsFactors = FALSE
+) |>
+  mutate(
+    GY  = 3.5 + rnorm(n(), 0, 0.8) + rep(seq(-0.5, 0.5, length.out = n_gen), n_env),
+    TKW = 40  + rnorm(n(), 0, 4)   + rep(seq(-5, 5, length.out = n_gen), n_env),
+    PH  = 85  + rnorm(n(), 0, 6)   + rep(seq(-8, 8, length.out = n_gen), n_env)
+  )
+
+# BLUP-like genotype means (averaged over environments)
+blup_df <- breeding_df |>
+  group_by(Genotype) |>
+  summarise(
+    GY_blup  = mean(GY),
+    TKW_blup = mean(TKW),
+    PH_blup  = mean(PH),
+    .groups   = "drop"
+  ) |>
+  mutate(
+    Selection = ifelse(GY_blup > quantile(GY_blup, 0.75), "Selected", "Unselected")
+  )
+```
+
+---
+
+## BLUP Distribution Plot {#agri-blup}
+
+A standard first step in variety selection is visualising the distribution of predicted genotype values.
+
+```{r agri-blup-plot, fig.cap = "BLUP estimates for grain yield. Top 25% genotypes (selected) shown in a contrasting colour. Dashed line = selection threshold.", fig.alt = "Dot-plot of BLUP estimates ranked by grain yield with selection status colour-coded."}
+threshold <- quantile(blup_df$GY_blup, 0.75)
+
+ggplot(blup_df, aes(x = reorder(Genotype, GY_blup), y = GY_blup,
+                    colour = Selection)) +
+  geom_point(size = 3) +
+  geom_hline(yintercept = threshold, linetype = "dashed", colour = "grey40") +
+  scale_colour_manual(values = c("Selected" = "#D62728", "Unselected" = "#1F77B4")) +
+  labs(
+    x      = "Genotype",
+    y      = "Grain Yield BLUP (t/ha)",
+    colour = NULL,
+    title  = "Genotype Ranking by Grain Yield BLUPs",
+    caption = "Dashed line = 75th percentile selection threshold"
+  ) +
+  theme_bw(base_size = 12) +
+  theme(
+    axis.text.x  = element_text(angle = 45, hjust = 1),
+    legend.position = "top"
+  )
+```
+
+---
+
+## Genotype × Environment (GxE) Interaction Plot {#agri-gxe}
+
+GxE interaction is central to MET analysis. An **interaction plot** reveals which genotypes are stable and which are specifically adapted.
+
+```{r agri-gxe-plot, fig.cap = "GxE interaction plot for grain yield. Crossing lines indicate significant GxE interaction.", fig.alt = "Line plot showing grain yield of 20 genotypes across 4 environments."}
+# Highlight top 5 + bottom 5 genotypes for clarity
+focal <- c(
+  blup_df |> slice_max(GY_blup, n = 5) |> pull(Genotype),
+  blup_df |> slice_min(GY_blup, n = 5) |> pull(Genotype)
+)
+
+breeding_df |>
+  mutate(
+    Highlight = ifelse(Genotype %in% focal, Genotype, "Other"),
+    Alpha     = ifelse(Genotype %in% focal, 1, 0.15)
+  ) |>
+  ggplot(aes(x = Environment, y = GY, group = Genotype,
+             colour = Highlight, alpha = Alpha)) +
+  geom_line(linewidth = 0.7) +
+  geom_point(size = 1.5) +
+  scale_alpha_identity() +
+  scale_colour_manual(
+    values = c(setNames(scales::hue_pal()(10), focal), Other = "grey70")
+  ) +
+  labs(
+    x      = "Environment",
+    y      = "Grain Yield (t/ha)",
+    colour = "Genotype",
+    title  = "Genotype × Environment Interaction — Grain Yield"
+  ) +
+  theme_bw(base_size = 12) +
+  theme(legend.position = "right")
+```
+
+---
+
+## Multi-Trait Correlation Heatmap {#agri-heatmap}
+
+Breeders need to understand **trait correlations** before designing selection indices.
+
+```{r agri-heatmap, fig.cap = "Pearson correlation heatmap for three breeding traits. Numbers show correlation coefficients.", fig.alt = "Colour-coded correlation matrix for GY, TKW, and PH."}
+cor_mat <- blup_df |>
+  select(GY_blup, TKW_blup, PH_blup) |>
+  rename(GY = GY_blup, TKW = TKW_blup, PH = PH_blup) |>
+  cor() |>
+  as.data.frame() |>
+  rownames_to_column("Trait1") |>
+  pivot_longer(-Trait1, names_to = "Trait2", values_to = "r")
+
+ggplot(cor_mat, aes(x = Trait1, y = Trait2, fill = r)) +
+  geom_tile(colour = "white", linewidth = 0.5) +
+  geom_text(aes(label = round(r, 2)), size = 4, fontface = "bold") +
+  scale_fill_gradient2(
+    low  = "#2166AC",
+    mid  = "white",
+    high = "#D6604D",
+    midpoint = 0,
+    limits = c(-1, 1),
+    name = "Pearson r"
+  ) +
+  coord_equal() +
+  labs(
+    x     = NULL,
+    y     = NULL,
+    title = "Multi-Trait Phenotypic Correlation Heatmap"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    panel.grid = element_blank(),
+    axis.text  = element_text(face = "bold")
+  )
+```
+
+---
+
+## Genomic PCA Biplot {#agri-pca}
+
+**Principal Component Analysis** of SNP marker data is used to assess population structure and detect outliers before genomic selection.
+
+```{r agri-pca, fig.cap = "PCA biplot from simulated SNP marker data. Points coloured by putative subpopulation.", fig.alt = "Scatter plot of PC1 vs PC2 scores for 20 genotypes, coloured by subpopulation."}
+# Simulate PCA scores (in practice: prcomp on scaled marker matrix)
+set.seed(7)
+pca_df <- tibble(
+  Genotype   = genotypes,
+  PC1        = c(rnorm(10, -2, 0.8), rnorm(10, 2, 0.8)),
+  PC2        = rnorm(20, 0, 1.2),
+  Subpop     = rep(c("SP1", "SP2"), each = 10),
+  GY_blup    = blup_df$GY_blup
+)
+
+ggplot(pca_df, aes(x = PC1, y = PC2, colour = Subpop, size = GY_blup,
+                   label = Genotype)) +
+  geom_point(alpha = 0.85) +
+  ggrepel::geom_text_repel(size = 3, show.legend = FALSE) +
+  scale_colour_brewer(palette = "Set1", name = "Subpopulation") +
+  scale_size_continuous(range = c(3, 8), name = "GY BLUP (t/ha)") +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey60") +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey60") +
+  labs(
+    x     = "PC1",
+    y     = "PC2",
+    title = "Genomic PCA Biplot — Population Structure"
+  ) +
+  theme_bw(base_size = 12)
+```
+
+> **Note:** `ggrepel::geom_text_repel()` prevents label overlap and is essential for genotype biplots. Install with `install.packages("ggrepel")`.
+
+---
+
+## Field Trial Layout Visualization {#agri-field}
+
+Visualising the **spatial layout** of field trials helps detect field gradients and check randomisation quality.
+
+```{r agri-field, fig.cap = "Alpha-lattice field trial layout. Each cell shows genotype label; fill colour represents observed grain yield — useful for detecting spatial trends.", fig.alt = "Grid plot showing field trial layout with yield gradient visible."}
+set.seed(99)
+rows <- 5
+cols <- 16
+
+field_df <- expand.grid(Row = 1:rows, Col = 1:cols) |>
+  mutate(
+    Genotype = sample(rep(genotypes, length.out = rows * cols)),
+    # Add a spatial gradient to simulate field trend
+    GY_obs   = 3.5 + 0.05 * Row - 0.02 * Col + rnorm(rows * cols, 0, 0.3)
+  )
+
+ggplot(field_df, aes(x = Col, y = Row, fill = GY_obs)) +
+  geom_tile(colour = "white", linewidth = 0.4) +
+  geom_text(aes(label = Genotype), size = 2.2, colour = "white", fontface = "bold") +
+  scale_fill_viridis_c(option = "plasma", name = "GY (t/ha)") +
+  scale_y_reverse() +
+  labs(
+    x     = "Column",
+    y     = "Row",
+    title = "Field Trial Layout — Grain Yield Spatial Distribution"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    panel.grid   = element_blank(),
+    axis.text    = element_text(size = 9)
+  )
+```
+
+---
+
+## Publication-Ready Theme for Q1 Journals {#agri-theme}
+
+Most Q1 plant science journals (e.g., *Plant Cell*, *TAG*, *Theoretical and Applied Genetics*) require:
+
+- White background, no gridlines
+- Times New Roman or similar serif font (use `extrafont` or `showtext`)
+- Figure width ≤ 180 mm (two-column) or 86 mm (single-column)
+- Minimum 8 pt font in final print
+
+```{r agri-theme-def}
+theme_q1_journal <- function(base_size = 10) {
+  theme_classic(base_size = base_size) +
+    theme(
+      # Panel
+      panel.border     = element_rect(colour = "black", fill = NA, linewidth = 0.5),
+      axis.line        = element_blank(),
+      # Text
+      axis.title       = element_text(size = base_size, face = "bold"),
+      axis.text        = element_text(size = base_size - 1, colour = "black"),
+      legend.title     = element_text(size = base_size, face = "bold"),
+      legend.text      = element_text(size = base_size - 1),
+      plot.title       = element_text(size = base_size + 1, face = "bold", hjust = 0),
+      # Margins
+      plot.margin      = margin(5, 5, 5, 5, "mm"),
+      legend.key.size  = unit(3.5, "mm"),
+      strip.background = element_rect(fill = "grey92", colour = "black", linewidth = 0.4),
+      strip.text       = element_text(size = base_size - 1, face = "bold")
+    )
+}
+```
+
+Apply it to any ggplot2 plot:
+
+```{r agri-theme-example, fig.cap = "Grain yield BLUPs with Q1 journal theme applied.", fig.alt = "Bar chart of grain yield BLUPs using a clean publication theme."}
+ggplot(blup_df, aes(x = reorder(Genotype, GY_blup), y = GY_blup,
+                    fill = Selection)) +
+  geom_col(width = 0.7) +
+  scale_fill_manual(values = c("Selected" = "#CC3333", "Unselected" = "#336699")) +
+  labs(
+    x    = "Genotype",
+    y    = "Grain Yield BLUP (t/ha)",
+    fill = NULL
+  ) +
+  theme_q1_journal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Save at correct resolution for journal submission:
+
+```{r agri-save, eval = FALSE}
+ggsave(
+  "figure_01_blup_ranking.tiff",
+  width  = 180,   # mm, two-column width
+  height = 100,
+  units  = "mm",
+  dpi    = 600,   # minimum 300; 600 for TIFF
+  compression = "lzw"
+)
+```
+
+---
+
+## Summary {#agri-summary}
+
+| Task | Key geom / function |
+|------|---------------------|
+| Genotype ranking (BLUPs) | `geom_point()` + `reorder()` |
+| GxE interaction | `geom_line()` grouped by genotype |
+| Trait correlations | `geom_tile()` + `scale_fill_gradient2()` |
+| Population structure (PCA) | `geom_point()` + `ggrepel` |
+| Field layout | `geom_tile()` + `scale_y_reverse()` |
+| Journal output | `theme_q1_journal()` + `ggsave(..., dpi = 600)` |
+
+These patterns cover the core visualisation needs in a modern plant breeding program. Combine them with `patchwork` (Chapter \@ref(arranging-plots)) to assemble multi-panel figures ready for manuscript submission.

@@ -1,21 +1,25 @@
---- 
+---
 title: "ggplot2: Elegant Graphics for Data Analysis"
-author: "Hadley Wickham"
+author: "Hadley Wickham (with community additions by Mosiur Rahman)"
 site: bookdown::bookdown_site
 output: bookdown::gitbook
 documentclass: book
 bibliography: references.bib
 biblio-style: apalike
 link-citations: yes
-github-repo: hadley/ggplot2-book
+github-repo: Mosiuropu/ggplot2-book
 twitter-handle: hadleywickham
-description: "Master ggplot2 and the rich grammar that underlies it."
+description: "Master ggplot2 and the rich grammar that underlies it. This fork adds a practical chapter on agricultural and plant breeding data visualisation."
 ---
 
-`r if (knitr::is_latex_output()) '<!--'` 
+`r if (knitr::is_latex_output()) '<!--'`
 
 # Welcome {-}
 
 This is the online version of work-in-progress 3rd edition of "ggplot2: elegant graphics for data analysis"
+
+> **Fork note:** This repository is a community fork by [Mosiur Rahman](https://github.com/Mosiuropu),
+> extending the original book with a new chapter on
+> [Agricultural & Plant Breeding Data Visualization](#agricultural-breeding-viz).
 
 `r if (knitr::is_latex_output()) '-->'`
